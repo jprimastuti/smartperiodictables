@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Lucide Icons for aesthetic touch -->
     <script type="module" src="https://unpkg.com/lucide@latest"></script>
+    <!-- Load three.js for 3D visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         /* Custom styles for the table grid */
         .periodic-table-grid {
@@ -94,6 +96,9 @@
                 box-shadow: none;
                 overflow-y: auto;
             }
+            #bohr-model-container {
+                height: 200px !important; /* Smaller canvas on mobile */
+            }
         }
 
         /* Element Type Coloring (for utility classes) */
@@ -107,6 +112,11 @@
         .color-lanthanide { background-color: #ffb3ff; color: #4d004d; } /* Pink */
         .color-actinide { background-color: #ff66ff; color: #660066; } /* Brighter Pink */
         .color-unknown { background-color: #f0f0f0; color: #666666; } /* Gray */
+        
+        .correct-answer {
+            background-color: #d1fae5; /* Tailwind green-100 */
+            border-color: #34d399; /* Tailwind green-400 */
+        }
         
     </style>
 </head>
@@ -127,7 +137,7 @@
 
         <!-- Detail Information Card (Initially Hidden) -->
         <div id="detail-card" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50 transition-opacity duration-300">
-            <div id="card-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full transform transition-all duration-300 scale-95" role="dialog" aria-modal="true">
+            <div id="card-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full transform transition-all duration-300 scale-95 relative" role="dialog" aria-modal="true">
                 
                 <!-- Close Button -->
                 <button onclick="hideDetailCard()" class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
@@ -159,6 +169,18 @@
                     </div>
                 </div>
                 
+                <!-- 3D Visualization Section -->
+                <div class="mt-6">
+                    <h3 class="flex items-center text-lg font-bold text-gray-800 mb-2">
+                        <span class="mr-2">⚛️</span> Bohr Model Visualization
+                    </h3>
+                    <div id="bohr-model-container" class="w-full bg-gray-100 rounded-lg shadow-inner flex justify-center items-center" style="height: 300px; cursor: grab;">
+                        <!-- Canvas will be appended here -->
+                    </div>
+                    <div id="nucleus-info" class="text-xs text-center mt-2 text-gray-600"></div>
+                </div>
+
+
                 <!-- Electronic Configuration -->
                 <div class="mt-4">
                     <p class="text-sm font-semibold text-gray-500 mb-1">Sub-level Electronic Configuration</p>
@@ -173,34 +195,450 @@
                     <p id="data-fact" class="text-gray-700 italic text-base"></p>
                 </div>
                 
+                <!-- LLM-Powered Features Section -->
+                <div class="mt-6 border-t pt-6">
+                    <h3 class="flex items-center text-lg font-bold text-gray-800 mb-3">
+                        <span class="mr-2 text-xl">🚀</span> AI Exploration Tools
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <!-- Analogy Button and Output -->
+                        <button id="analogy-button" class="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:opacity-50">
+                            ✨ Generate Analogy
+                        </button>
+                        <div id="analogy-output" class="hidden p-3 bg-indigo-50 border-l-4 border-indigo-400 rounded-lg text-sm text-gray-800"></div>
+
+                        <!-- Quiz Button and Output -->
+                        <button id="quiz-button" class="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition disabled:opacity-50">
+                            ✨ Generate Quiz Question
+                        </button>
+                        <div id="quiz-output" class="hidden p-3 bg-purple-50 border-l-4 border-purple-400 rounded-lg text-sm text-gray-800"></div>
+                    </div>
+                </div>
+
+                <!-- Global Loading Indicator (inside the card for context) -->
+                <div id="loading-indicator" class="hidden absolute inset-0 flex items-center justify-center bg-white/90 z-10 rounded-xl">
+                    <div class="flex items-center space-x-2 text-indigo-600 font-semibold">
+                        <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Generating AI content...</span>
+                    </div>
+                </div>
+                
             </div>
         </div>
 
     </div>
 
     <script>
-        // Use a global variable for element data
-        const periodicTableData = {
-            'H': { pos: [1, 1], name: 'Hydrogen', number: 1, mass: 1.008, config: '1s¹', type: 'nonmetal', fact: 'The most abundant element in the universe, constituting roughly 75% of all baryonic mass.' },
-            'He': { pos: [1, 18], name: 'Helium', number: 2, mass: 4.0026, config: '1s²', type: 'noble', fact: 'Its boiling point is the lowest among all elements, making it essential for cryogenic research.' },
-            
-            'Li': { pos: [2, 1], name: 'Lithium', number: 3, mass: 6.94, config: '[He] 2s¹', type: 'alkali', fact: 'Used in batteries for phones and cars, it is the lightest metal.' },
-            'Be': { pos: [2, 2], name: 'Beryllium', number: 4, mass: 9.0122, config: '[He] 2s²', type: 'alkaline', fact: 'Its lightness and high melting point make it perfect for aerospace parts.' },
-            'B': { pos: [2, 13], name: 'Boron', number: 5, mass: 10.81, config: '[He] 2s² 2p¹', type: 'metalloid', fact: 'Found in the mineral borax, it is often used in pyrotechnics for a green color.' },
-            'C': { pos: [2, 14], name: 'Carbon', number: 6, mass: 12.011, config: '[He] 2s² 2p²', type: 'nonmetal', fact: 'The basis of all known life, forming diamonds, graphite, and living tissue.' },
-            'N': { pos: [2, 15], name: 'Nitrogen', number: 7, mass: 14.007, config: '[He] 2s² 2p³', type: 'nonmetal', fact: 'Makes up about 78% of Earth\'s atmosphere, mostly in the form of N₂ gas.' },
-            'O': { pos: [2, 16], name: 'Oxygen', number: 8, mass: 15.999, config: '[He] 2s² 2p⁴', type: 'nonmetal', fact: 'Essential for respiration and combustion, it is the third most abundant element in the universe.' },
-            'F': { pos: [2, 17], name: 'Fluorine', number: 9, mass: 18.998, config: '[He] 2s² 2p⁵', type: 'nonmetal', fact: 'The most chemically reactive and electronegative element.' },
-            'Ne': { pos: [2, 18], name: 'Neon', number: 10, mass: 20.180, config: '[He] 2s² 2p⁶', type: 'noble', fact: 'Gives the characteristic bright orange-red glow to "neon" signs.' },
+        // --- Gemini API Configuration ---
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        const loadingIndicator = document.getElementById('loading-indicator');
 
-            'Na': { pos: [3, 1], name: 'Sodium', number: 11, mass: 22.990, config: '[Ne] 3s¹', type: 'alkali', fact: 'Highly reactive metal; its salt (NaCl) is essential for human life.' },
-            'Mg': { pos: [3, 2], name: 'Magnesium', number: 12, mass: 24.305, config: '[Ne] 3s²', type: 'alkaline', fact: 'Used in lightweight alloys and is the core element in the chlorophyll molecule.' },
-            'Al': { pos: [3, 13], name: 'Aluminum', number: 13, mass: 26.982, config: '[Ne] 3s² 3p¹', type: 'post-transition', fact: 'The most abundant metal in Earth\'s crust, valued for its low density and corrosion resistance.' },
-            'Si': { pos: [3, 14], name: 'Silicon', number: 14, mass: 28.085, config: '[Ne] 3s² 3p²', type: 'metalloid', fact: 'The second most abundant element in the Earth\'s crust and the basis of modern electronics.' },
-            'P': { pos: [3, 15], name: 'Phosphorus', number: 15, mass: 30.974, config: '[Ne] 3s² 3p³', type: 'nonmetal', fact: 'Has several allotropes; white phosphorus glows in the dark (chemiluminescence).' },
-            'S': { pos: [3, 16], name: 'Sulfur', number: 16, mass: 32.06, config: '[Ne] 3s² 3p⁴', type: 'nonmetal', fact: 'It smells like rotten eggs when combined with hydrogen (H₂S).' },
-            'Cl': { pos: [3, 17], name: 'Chlorine', number: 17, mass: 35.45, config: '[Ne] 3s² 3p⁵', type: 'nonmetal', fact: 'Used as a powerful disinfectant and a component in table salt.' },
-            'Ar': { pos: [3, 18], name: 'Argon', number: 18, mass: 39.948, config: '[Ne] 3s² 3p⁶', type: 'noble', fact: 'Used in light bulbs to protect the filament from oxidizing.' },
+        // --- 3D Visualization Variables ---
+        let scene, camera, renderer, atomGroup;
+        let animationFrameId; // To control the animation loop
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        const ROTATION_SPEED = 0.005;
+
+        // Helper function for exponential backoff (retry)
+        async function fetchRetry(url, options, maxRetries = 5, delay = 1000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429) { // 429 is Too Many Requests
+                        return response;
+                    }
+                    // Only log retry attempt, not error
+                } catch (error) {
+                    // Only log retry attempt, not error
+                }
+                await new Promise(resolve => setTimeout(resolve, delay * (2 ** i)));
+            }
+            throw new Error('API request failed after multiple retries.');
+        }
+
+        function showLoading(show) {
+            loadingIndicator.classList.toggle('hidden', !show);
+        }
+
+        // --- Gemini Feature 1: Analogy Generation (Standard Text) ---
+        async function generateAnalogy(elementName) {
+            // ... (Same as before)
+            const analogyOutput = document.getElementById('analogy-output');
+            analogyOutput.classList.add('hidden');
+            analogyOutput.innerHTML = '';
+            
+            showLoading(true);
+
+            const userQuery = `Create a concise, high school-level analogy to explain the key chemical properties and behavior of the element ${elementName}. Keep the analogy engaging and descriptive.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: "Act as a creative chemistry teacher focused on making complex concepts relatable through metaphor and analogy. Provide only the analogy text." }]
+                },
+            };
+
+            try {
+                const response = await fetchRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text) {
+                    analogyOutput.innerHTML = `<span class="font-bold block mb-1">Analogy for ${elementName}:</span>${text}`;
+                    analogyOutput.classList.remove('hidden');
+                } else {
+                    analogyOutput.innerHTML = 'Sorry, I couldn\'t generate an analogy right now. Try again later.';
+                    analogyOutput.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Gemini Analogy API Error:", error);
+                analogyOutput.innerHTML = 'An error occurred while connecting to the AI tool.';
+                analogyOutput.classList.remove('hidden');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- Gemini Feature 2: Quiz Question Generation (Structured JSON) ---
+        async function generateQuizQuestion(elementName) {
+            // ... (Same as before)
+            const quizOutput = document.getElementById('quiz-output');
+            quizOutput.classList.add('hidden');
+            quizOutput.innerHTML = '';
+            
+            showLoading(true);
+
+            const userQuery = `Generate a single multiple-choice quiz question about the element ${elementName}, specifically focusing on its periodic table classification, atomic structure, or main uses. The question must have exactly 4 options and one correct answer.`;
+
+            const jsonSchema = {
+                type: "OBJECT",
+                properties: {
+                    "question": { "type": "STRING", "description": "The multiple-choice question text." },
+                    "options": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Exactly four answer options." },
+                    "correctAnswerIndex": { "type": "NUMBER", "description": "0-based index (0, 1, 2, or 3) of the correct answer in the options array." },
+                    "explanation": { "type": "STRING", "description": "A brief explanation of why the correct answer is right." }
+                },
+                required: ["question", "options", "correctAnswerIndex", "explanation"]
+            };
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: jsonSchema
+                },
+                systemInstruction: {
+                    parts: [{ text: "You are a quiz master for high school chemistry. Generate a single question object that strictly adheres to the provided JSON schema." }]
+                }
+            };
+
+            try {
+                const response = await fetchRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (jsonText) {
+                    const quizData = JSON.parse(jsonText);
+                    renderQuiz(quizData, quizOutput);
+                } else {
+                    quizOutput.innerHTML = 'Sorry, I couldn\'t generate a structured quiz question. Try again later.';
+                    quizOutput.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                console.error("Gemini Quiz API Error:", error);
+                quizOutput.innerHTML = 'An error occurred while connecting to the AI tool or parsing the response.';
+                quizOutput.classList.remove('hidden');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Function to render the generated quiz and handle interaction
+        function renderQuiz(quiz, container) {
+            // ... (Same as before)
+            let html = `
+                <div class="font-bold text-gray-900 mb-2">${quiz.question}</div>
+                <div class="space-y-2">
+            `;
+
+            quiz.options.forEach((option, index) => {
+                html += `
+                    <button 
+                        class="quiz-option w-full text-left p-3 border border-purple-300 rounded-md hover:bg-purple-100 transition text-gray-700"
+                        data-index="${index}"
+                    >
+                        ${String.fromCharCode(65 + index)}. ${option}
+                    </button>
+                `;
+            });
+            
+            html += `</div><div id="quiz-explanation" class="mt-4 hidden p-3 text-sm rounded-lg border"></div>`;
+            container.innerHTML = html;
+            container.classList.remove('hidden');
+
+            const options = container.querySelectorAll('.quiz-option');
+            let answered = false;
+
+            options.forEach(button => {
+                button.addEventListener('click', () => {
+                    if (answered) return;
+                    answered = true;
+                    
+                    const selectedIndex = parseInt(button.getAttribute('data-index'));
+                    const explanationDiv = document.getElementById('quiz-explanation');
+                    explanationDiv.classList.remove('hidden');
+                    explanationDiv.innerHTML = `<span class="font-bold block mb-1">Explanation:</span> ${quiz.explanation}`;
+
+                    if (selectedIndex === quiz.correctAnswerIndex) {
+                        button.classList.add('correct-answer', 'border-green-500', 'bg-green-100', 'font-bold');
+                        explanationDiv.classList.add('bg-green-50', 'border-green-500', 'text-green-800');
+                    } else {
+                        button.classList.add('bg-red-100', 'border-red-500');
+                        explanationDiv.classList.add('bg-red-50', 'border-red-500', 'text-red-800');
+                        // Highlight correct answer
+                        options[quiz.correctAnswerIndex].classList.add('correct-answer', 'border-green-500', 'bg-green-100');
+                    }
+                    
+                    // Disable all buttons after answering
+                    options.forEach(btn => btn.disabled = true);
+                });
+            });
+        }
+        
+        // --- 3D Visualization Logic (three.js) ---
+        
+        function renderBohrModel(data) {
+            const container = document.getElementById('bohr-model-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 1. Cleanup previous model
+            if (renderer) {
+                cancelAnimationFrame(animationFrameId);
+                renderer.dispose();
+            }
+            container.innerHTML = '';
+            
+            // 2. Scene Setup
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            container.appendChild(renderer.domElement);
+            
+            atomGroup = new THREE.Group();
+            scene.add(atomGroup);
+
+            // 3. Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 1.2);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
+
+            // 4. Constants
+            const nucleusRadius = 0.5;
+            const electronRadius = 0.1;
+            const orbitRadii = [1.5, 2.5, 3.5, 4.5, 5.5]; // Radii for K, L, M, N, O shells
+
+            // 5. Nucleus (Protons and Neutrons)
+            const protons = data.number;
+            const neutrons = Math.round(data.mass) - protons;
+            
+            document.getElementById('nucleus-info').innerHTML = `
+                <span class="font-bold text-red-600">${protons} Protons</span> + 
+                <span class="font-bold text-blue-600">${neutrons} Neutrons</span> 
+                in the Nucleus
+            `;
+
+            // Draw a single central sphere for the nucleus
+            const nucleusGeometry = new THREE.SphereGeometry(nucleusRadius, 32, 32);
+            const nucleusMaterial = new THREE.MeshPhongMaterial({ color: 0x999999 }); // Gray/mixed
+            const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
+            atomGroup.add(nucleus);
+
+
+            // 6. Electron Orbits and Electrons
+            
+            // This group will hold all electrons to animate them independently
+            const electronGroups = []; 
+
+            data.shells.forEach((electronsInShell, shellIndex) => {
+                if (electronsInShell === 0) return;
+                
+                const orbitRadius = orbitRadii[shellIndex];
+                if (!orbitRadius) return; // Safety check
+
+                // A. Draw Orbit Ring
+                const orbitGeometry = new THREE.TorusGeometry(orbitRadius, 0.01, 16, 100);
+                const orbitMaterial = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+                const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+                // Tilt orbits for better 3D look
+                orbit.rotation.x = Math.PI / 2; 
+                orbit.rotation.y = shellIndex * 0.1; // Small offset tilt
+                atomGroup.add(orbit);
+                
+                // B. Place Electrons
+                const electronGroup = new THREE.Group(); // Group for the current shell's electrons
+                
+                for (let i = 0; i < electronsInShell; i++) {
+                    const electronGeometry = new THREE.SphereGeometry(electronRadius, 16, 16);
+                    const electronMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 }); // Green for electrons
+                    const electron = new THREE.Mesh(electronGeometry, electronMaterial);
+                    
+                    // Position electron on the orbit ring initially
+                    const angle = (i / electronsInShell) * Math.PI * 2;
+                    electron.position.set(Math.cos(angle) * orbitRadius, 0, Math.sin(angle) * orbitRadius);
+                    
+                    electronGroup.add(electron);
+                }
+                
+                // Apply the same tilt to the electron group so they move on the orbit plane
+                electronGroup.rotation.x = orbit.rotation.x;
+                electronGroup.rotation.y = orbit.rotation.y;
+                atomGroup.add(electronGroup);
+                electronGroups.push(electronGroup);
+            });
+            
+            // 7. Camera Positioning
+            camera.position.z = orbitRadii[data.shells.length - 1] + 2 || 5; 
+            
+            // 8. Interaction (Mouse Drag Rotation)
+            const rotationContainer = container.querySelector('canvas') || container;
+
+            rotationContainer.addEventListener('mousedown', onMouseDown, false);
+            rotationContainer.addEventListener('mousemove', onMouseMove, false);
+            rotationContainer.addEventListener('mouseup', onMouseUp, false);
+            rotationContainer.addEventListener('mouseleave', onMouseUp, false); 
+            
+            // Touch support for mobile
+            rotationContainer.addEventListener('touchstart', onTouchStart, false);
+            rotationContainer.addEventListener('touchmove', onTouchMove, false);
+            rotationContainer.addEventListener('touchend', onMouseUp, false);
+
+            function onMouseDown(event) {
+                isDragging = true;
+                previousMousePosition.x = event.clientX;
+                previousMousePosition.y = event.clientY;
+                rotationContainer.style.cursor = 'grabbing';
+            }
+            function onTouchStart(event) {
+                event.preventDefault(); // Prevent scrolling
+                isDragging = true;
+                const touch = event.touches[0];
+                previousMousePosition.x = touch.clientX;
+                previousMousePosition.y = touch.clientY;
+                rotationContainer.style.cursor = 'grabbing';
+            }
+
+            function onMouseMove(event) {
+                if (!isDragging) return;
+                
+                const deltaX = event.clientX - previousMousePosition.x;
+                const deltaY = event.clientY - previousMousePosition.y;
+
+                atomGroup.rotation.y += deltaX * ROTATION_SPEED;
+                atomGroup.rotation.x += deltaY * ROTATION_SPEED;
+                
+                previousMousePosition.x = event.clientX;
+                previousMousePosition.y = event.clientY;
+            }
+            function onTouchMove(event) {
+                if (!isDragging) return;
+                event.preventDefault(); // Prevent scrolling
+
+                const touch = event.touches[0];
+                const deltaX = touch.clientX - previousMousePosition.x;
+                const deltaY = touch.clientY - previousMousePosition.y;
+
+                atomGroup.rotation.y += deltaX * ROTATION_SPEED * 1.5; // Faster touch rotation
+                atomGroup.rotation.x += deltaY * ROTATION_SPEED * 1.5;
+                
+                previousMousePosition.x = touch.clientX;
+                previousMousePosition.y = touch.clientY;
+            }
+
+            function onMouseUp() {
+                isDragging = false;
+                rotationContainer.style.cursor = 'grab';
+            }
+            
+            // 9. Animation Loop
+            let time = 0;
+            const electronSpeed = 0.005; // Base speed
+            
+            function animate() {
+                animationFrameId = requestAnimationFrame(animate);
+
+                // Animate electrons around the nucleus
+                electronGroups.forEach((group, index) => {
+                    // Different rotation speed for each shell
+                    group.rotation.z += electronSpeed / (index + 1); 
+                });
+
+                // Continuous slow rotation if not dragging (to show 3D nature)
+                if (!isDragging) {
+                    atomGroup.rotation.y += 0.001; 
+                }
+
+                renderer.render(scene, camera);
+                time++;
+            }
+            
+            // Handle resizing
+            function onWindowResize() {
+                const container = document.getElementById('bohr-model-container');
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(width, height);
+            }
+
+            window.addEventListener('resize', onWindowResize, false);
+            
+            animate();
+            
+        }
+
+        // --- Element Data with Shells Added ---
+        const periodicTableData = {
+            'H': { pos: [1, 1], name: 'Hydrogen', number: 1, mass: 1.008, config: '1s¹', shells: [1], type: 'nonmetal', fact: 'The most abundant element in the universe, constituting roughly 75% of all baryonic mass.' },
+            'He': { pos: [1, 18], name: 'Helium', number: 2, mass: 4.0026, config: '1s²', shells: [2], type: 'noble', fact: 'Its boiling point is the lowest among all elements, making it essential for cryogenic research.' },
+            
+            'Li': { pos: [2, 1], name: 'Lithium', number: 3, mass: 6.94, config: '[He] 2s¹', shells: [2, 1], type: 'alkali', fact: 'Used in batteries for phones and cars, it is the lightest metal.' },
+            'Be': { pos: [2, 2], name: 'Beryllium', number: 4, mass: 9.0122, config: '[He] 2s²', shells: [2, 2], type: 'alkaline', fact: 'Its lightness and high melting point make it perfect for aerospace parts.' },
+            'B': { pos: [2, 13], name: 'Boron', number: 5, mass: 10.81, config: '[He] 2s² 2p¹', shells: [2, 3], type: 'metalloid', fact: 'Found in the mineral borax, it is often used in pyrotechnics for a green color.' },
+            'C': { pos: [2, 14], name: 'Carbon', number: 6, mass: 12.011, config: '[He] 2s² 2p²', shells: [2, 4], type: 'nonmetal', fact: 'The basis of all known life, forming diamonds, graphite, and living tissue.' },
+            'N': { pos: [2, 15], name: 'Nitrogen', number: 7, mass: 14.007, config: '[He] 2s² 2p³', shells: [2, 5], type: 'nonmetal', fact: 'Makes up about 78% of Earth\'s atmosphere, mostly in the form of N₂ gas.' },
+            'O': { pos: [2, 16], name: 'Oxygen', number: 8, mass: 15.999, config: '[He] 2s² 2p⁴', shells: [2, 6], type: 'nonmetal', fact: 'Essential for respiration and combustion, it is the third most abundant element in the universe.' },
+            'F': { pos: [2, 17], name: 'Fluorine', number: 9, mass: 18.998, config: '[He] 2s² 2p⁵', shells: [2, 7], type: 'nonmetal', fact: 'The most chemically reactive and electronegative element.' },
+            'Ne': { pos: [2, 18], name: 'Neon', number: 10, mass: 20.180, config: '[He] 2s² 2p⁶', shells: [2, 8], type: 'noble', fact: 'Gives the characteristic bright orange-red glow to "neon" signs.' },
+
+            'Na': { pos: [3, 1], name: 'Sodium', number: 11, mass: 22.990, config: '[Ne] 3s¹', shells: [2, 8, 1], type: 'alkali', fact: 'Highly reactive metal; its salt (NaCl) is essential for human life.' },
+            'Mg': { pos: [3, 2], name: 'Magnesium', number: 12, mass: 24.305, config: '[Ne] 3s²', shells: [2, 8, 2], type: 'alkaline', fact: 'Used in lightweight alloys and is the core element in the chlorophyll molecule.' },
+            'Al': { pos: [3, 13], name: 'Aluminum', number: 13, mass: 26.982, config: '[Ne] 3s² 3p¹', shells: [2, 8, 3], type: 'post-transition', fact: 'The most abundant metal in Earth\'s crust, valued for its low density and corrosion resistance.' },
+            'Si': { pos: [3, 14], name: 'Silicon', number: 14, mass: 28.085, config: '[Ne] 3s² 3p²', shells: [2, 8, 4], type: 'metalloid', fact: 'The second most abundant element in the Earth\'s crust and the basis of modern electronics.' },
+            'P': { pos: [3, 15], name: 'Phosphorus', number: 15, mass: 30.974, config: '[Ne] 3s² 3p³', shells: [2, 8, 5], type: 'nonmetal', fact: 'Has several allotropes; white phosphorus glows in the dark (chemiluminescence).' },
+            'S': { pos: [3, 16], name: 'Sulfur', number: 16, mass: 32.06, config: '[Ne] 3s² 3p⁴', shells: [2, 8, 6], type: 'nonmetal', fact: 'It smells like rotten eggs when combined with hydrogen (H₂S).' },
+            'Cl': { pos: [3, 17], name: 'Chlorine', number: 17, mass: 35.45, config: '[Ne] 3s² 3p⁵', shells: [2, 8, 7], type: 'nonmetal', fact: 'Used as a powerful disinfectant and a component in table salt.' },
+            'Ar': { pos: [3, 18], name: 'Argon', number: 18, mass: 39.948, config: '[Ne] 3s² 3p⁶', shells: [2, 8, 8], type: 'noble', fact: 'Used in light bulbs to protect the filament from oxidizing.' },
 
             // Placeholders for visual structure
             'Placeholder_Period_4_Start': { pos: [4, 3], symbol: '', type: 'unknown', placeholder: true },
@@ -226,7 +664,8 @@
         const tableContainer = document.getElementById('periodic-table');
         const detailCard = document.getElementById('detail-card');
         const cardContent = document.getElementById('card-content');
-        
+        let currentElementSymbol = null; // Store the currently viewed element
+
         // Function to create and render all elements
         function renderPeriodicTable() {
             // Create a temporary array to hold all 18x7 cells, initialized to null
@@ -336,6 +775,8 @@
             const data = periodicTableData[symbol];
             if (!data) return;
 
+            currentElementSymbol = symbol; // Set the current element
+            
             // Get color mapping for the detail card symbol block
             const { bg, text } = typeColorMap[data.type];
             
@@ -370,8 +811,26 @@
             document.getElementById('data-mass').textContent = data.mass.toFixed(4);
             document.getElementById('data-config').textContent = data.config;
             document.getElementById('data-fact').textContent = data.fact;
+            
+            // 4. Render 3D Model
+            renderBohrModel(data);
 
-            // 4. Show the Card
+            // 5. Reset LLM features and attach listeners
+            document.getElementById('analogy-output').classList.add('hidden');
+            document.getElementById('quiz-output').classList.add('hidden');
+
+            // Remove existing listeners before adding new one to prevent duplicates
+            const analogyButton = document.getElementById('analogy-button');
+            const quizButton = document.getElementById('quiz-button');
+            
+            analogyButton.replaceWith(analogyButton.cloneNode(true));
+            quizButton.replaceWith(quizButton.cloneNode(true));
+            
+            document.getElementById('analogy-button').addEventListener('click', () => generateAnalogy(data.name));
+            document.getElementById('quiz-button').addEventListener('click', () => generateQuizQuestion(data.name));
+
+
+            // 6. Show the Card
             detailCard.classList.remove('hidden');
             detailCard.classList.add('flex');
             cardContent.classList.remove('scale-95', 'opacity-0');
@@ -383,6 +842,12 @@
 
         // Function to hide the detail card
         function hideDetailCard() {
+             // Stop the 3D animation loop
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
             cardContent.classList.remove('scale-100', 'opacity-100');
             cardContent.classList.add('scale-95', 'opacity-0');
             
@@ -390,6 +855,7 @@
             setTimeout(() => {
                 detailCard.classList.remove('flex');
                 detailCard.classList.add('hidden');
+                currentElementSymbol = null; // Clear current element
             }, 300);
         }
 
