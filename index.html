@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Periodic Table Explorer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Lucide Icons for aesthetic touch -->
+    <script type="module" src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom styles for the table grid */
+        .periodic-table-grid {
+            display: grid;
+            grid-template-columns: repeat(18, minmax(0, 1fr));
+            gap: 4px; /* Reduced gap for a tighter look */
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        /* Styling for each element block */
+        .element-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            aspect-ratio: 1 / 1.1; /* Slightly taller than wide */
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 6px;
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            user-select: none;
+        }
+        
+        /* Hover effect to make it interactive */
+        .element-block:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 10; /* Bring forward on hover */
+        }
+        
+        /* Typography */
+        .atomic-number {
+            font-size: 0.7rem; /* Smaller for number */
+            font-weight: 500;
+            line-height: 1;
+            position: absolute;
+            top: 2px;
+            left: 4px;
+        }
+
+        .symbol {
+            font-size: 1.4rem; /* Prominent symbol */
+            font-weight: 800;
+            line-height: 1;
+            margin-top: -2px; /* Adjust vertical alignment */
+        }
+
+        .atomic-mass {
+            font-size: 0.6rem; /* Smallest for mass */
+            font-weight: 400;
+            line-height: 1;
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 768px) {
+            .periodic-table-grid {
+                gap: 2px;
+            }
+            .symbol {
+                font-size: 1rem;
+            }
+            .atomic-number {
+                font-size: 0.6rem;
+            }
+            .atomic-mass {
+                display: none; /* Hide mass on small screens to save space */
+            }
+            /* Adjust detail card for mobile */
+            #detail-card {
+                top: 0;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
+                box-shadow: none;
+                overflow-y: auto;
+            }
+        }
+
+        /* Element Type Coloring (for utility classes) */
+        .color-alkali { background-color: #ff9999; color: #400000; } /* Light Red/Orange */
+        .color-alkaline { background-color: #ffc966; color: #4d2600; } /* Light Orange/Yellow */
+        .color-transition { background-color: #99ccff; color: #002d4d; } /* Light Blue */
+        .color-post-transition { background-color: #99ffcc; color: #004d33; } /* Light Teal */
+        .color-metalloid { background-color: #e699ff; color: #3d004d; } /* Light Violet */
+        .color-nonmetal { background-color: #99ff99; color: #004d00; } /* Light Green */
+        .color-noble { background-color: #ccccff; color: #1a1a4d; } /* Lavender */
+        .color-lanthanide { background-color: #ffb3ff; color: #4d004d; } /* Pink */
+        .color-actinide { background-color: #ff66ff; color: #660066; } /* Brighter Pink */
+        .color-unknown { background-color: #f0f0f0; color: #666666; } /* Gray */
+        
+    </style>
+</head>
+<body class="bg-gray-50 p-4 min-h-screen">
+
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-center text-gray-800 mb-2 mt-4">
+            Smart Periodic Table Explorer
+        </h1>
+        <p class="text-center text-sm sm:text-base text-gray-600 mb-6">
+            Click on any element to reveal its secrets!
+        </p>
+
+        <!-- Periodic Table Grid Container -->
+        <div id="periodic-table" class="periodic-table-grid">
+            <!-- Elements will be inserted here by JavaScript -->
+        </div>
+
+        <!-- Detail Information Card (Initially Hidden) -->
+        <div id="detail-card" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50 transition-opacity duration-300">
+            <div id="card-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full transform transition-all duration-300 scale-95" role="dialog" aria-modal="true">
+                
+                <!-- Close Button -->
+                <button onclick="hideDetailCard()" class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+                
+                <div class="flex items-start mb-4">
+                    <!-- Element Symbol/Number/Name -->
+                    <div id="detail-symbol-block" class="flex-shrink-0 mr-4 p-4 rounded-lg text-white text-center shadow-lg w-20 h-20 flex flex-col justify-center items-center">
+                        <span id="detail-number" class="text-xs font-semibold absolute top-1 left-2"></span>
+                        <span id="detail-symbol" class="text-4xl font-bold"></span>
+                        <span id="detail-mass" class="text-xs font-medium absolute bottom-1 right-2"></span>
+                    </div>
+                    <div class="flex-grow">
+                        <h2 id="detail-name" class="text-3xl font-extrabold text-gray-900 mb-1"></h2>
+                        <span id="detail-type" class="text-sm font-medium px-3 py-1 rounded-full text-white"></span>
+                    </div>
+                </div>
+
+                <!-- Core Data -->
+                <div class="grid grid-cols-2 gap-4 border-t pt-4 mt-4">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-500">Atomic Number (Z)</p>
+                        <p id="data-number" class="text-xl font-bold text-blue-600"></p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-gray-500">Atomic Mass (g/mol)</p>
+                        <p id="data-mass" class="text-xl font-bold text-green-600"></p>
+                    </div>
+                </div>
+                
+                <!-- Electronic Configuration -->
+                <div class="mt-4">
+                    <p class="text-sm font-semibold text-gray-500 mb-1">Sub-level Electronic Configuration</p>
+                    <p id="data-config" class="text-lg font-mono p-2 bg-gray-100 rounded-lg overflow-x-auto text-purple-700"></p>
+                </div>
+
+                <!-- Fun Fact -->
+                <div class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-lg">
+                    <h3 class="flex items-center text-lg font-bold text-yellow-800 mb-2">
+                        <span class="mr-2">💡</span> Fun Fact!
+                    </h3>
+                    <p id="data-fact" class="text-gray-700 italic text-base"></p>
+                </div>
+                
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Use a global variable for element data
+        const periodicTableData = {
+            'H': { pos: [1, 1], name: 'Hydrogen', number: 1, mass: 1.008, config: '1s¹', type: 'nonmetal', fact: 'The most abundant element in the universe, constituting roughly 75% of all baryonic mass.' },
+            'He': { pos: [1, 18], name: 'Helium', number: 2, mass: 4.0026, config: '1s²', type: 'noble', fact: 'Its boiling point is the lowest among all elements, making it essential for cryogenic research.' },
+            
+            'Li': { pos: [2, 1], name: 'Lithium', number: 3, mass: 6.94, config: '[He] 2s¹', type: 'alkali', fact: 'Used in batteries for phones and cars, it is the lightest metal.' },
+            'Be': { pos: [2, 2], name: 'Beryllium', number: 4, mass: 9.0122, config: '[He] 2s²', type: 'alkaline', fact: 'Its lightness and high melting point make it perfect for aerospace parts.' },
+            'B': { pos: [2, 13], name: 'Boron', number: 5, mass: 10.81, config: '[He] 2s² 2p¹', type: 'metalloid', fact: 'Found in the mineral borax, it is often used in pyrotechnics for a green color.' },
+            'C': { pos: [2, 14], name: 'Carbon', number: 6, mass: 12.011, config: '[He] 2s² 2p²', type: 'nonmetal', fact: 'The basis of all known life, forming diamonds, graphite, and living tissue.' },
+            'N': { pos: [2, 15], name: 'Nitrogen', number: 7, mass: 14.007, config: '[He] 2s² 2p³', type: 'nonmetal', fact: 'Makes up about 78% of Earth\'s atmosphere, mostly in the form of N₂ gas.' },
+            'O': { pos: [2, 16], name: 'Oxygen', number: 8, mass: 15.999, config: '[He] 2s² 2p⁴', type: 'nonmetal', fact: 'Essential for respiration and combustion, it is the third most abundant element in the universe.' },
+            'F': { pos: [2, 17], name: 'Fluorine', number: 9, mass: 18.998, config: '[He] 2s² 2p⁵', type: 'nonmetal', fact: 'The most chemically reactive and electronegative element.' },
+            'Ne': { pos: [2, 18], name: 'Neon', number: 10, mass: 20.180, config: '[He] 2s² 2p⁶', type: 'noble', fact: 'Gives the characteristic bright orange-red glow to "neon" signs.' },
+
+            'Na': { pos: [3, 1], name: 'Sodium', number: 11, mass: 22.990, config: '[Ne] 3s¹', type: 'alkali', fact: 'Highly reactive metal; its salt (NaCl) is essential for human life.' },
+            'Mg': { pos: [3, 2], name: 'Magnesium', number: 12, mass: 24.305, config: '[Ne] 3s²', type: 'alkaline', fact: 'Used in lightweight alloys and is the core element in the chlorophyll molecule.' },
+            'Al': { pos: [3, 13], name: 'Aluminum', number: 13, mass: 26.982, config: '[Ne] 3s² 3p¹', type: 'post-transition', fact: 'The most abundant metal in Earth\'s crust, valued for its low density and corrosion resistance.' },
+            'Si': { pos: [3, 14], name: 'Silicon', number: 14, mass: 28.085, config: '[Ne] 3s² 3p²', type: 'metalloid', fact: 'The second most abundant element in the Earth\'s crust and the basis of modern electronics.' },
+            'P': { pos: [3, 15], name: 'Phosphorus', number: 15, mass: 30.974, config: '[Ne] 3s² 3p³', type: 'nonmetal', fact: 'Has several allotropes; white phosphorus glows in the dark (chemiluminescence).' },
+            'S': { pos: [3, 16], name: 'Sulfur', number: 16, mass: 32.06, config: '[Ne] 3s² 3p⁴', type: 'nonmetal', fact: 'It smells like rotten eggs when combined with hydrogen (H₂S).' },
+            'Cl': { pos: [3, 17], name: 'Chlorine', number: 17, mass: 35.45, config: '[Ne] 3s² 3p⁵', type: 'nonmetal', fact: 'Used as a powerful disinfectant and a component in table salt.' },
+            'Ar': { pos: [3, 18], name: 'Argon', number: 18, mass: 39.948, config: '[Ne] 3s² 3p⁶', type: 'noble', fact: 'Used in light bulbs to protect the filament from oxidizing.' },
+
+            // Placeholders for visual structure
+            'Placeholder_Period_4_Start': { pos: [4, 3], symbol: '', type: 'unknown', placeholder: true },
+            'Placeholder_Period_5_Start': { pos: [5, 3], symbol: '', type: 'unknown', placeholder: true },
+            'Placeholder_Lanthanides': { pos: [6, 3], symbol: '57-71', type: 'lanthanide', label: 'Lanthanides' },
+            'Placeholder_Actinides': { pos: [7, 3], symbol: '89-103', type: 'actinide', label: 'Actinides' },
+        };
+        
+        // Define color classes mapped to element types
+        const typeColorMap = {
+            'alkali': { bg: 'color-alkali', text: 'text-white' },
+            'alkaline': { bg: 'color-alkaline', text: 'text-gray-900' },
+            'transition': { bg: 'color-transition', text: 'text-gray-900' },
+            'post-transition': { bg: 'color-post-transition', text: 'text-gray-900' },
+            'metalloid': { bg: 'color-metalloid', text: 'text-gray-900' },
+            'nonmetal': { bg: 'color-nonmetal', text: 'text-gray-900' },
+            'noble': { bg: 'color-noble', text: 'text-gray-900' },
+            'lanthanide': { bg: 'color-lanthanide', text: 'text-gray-900' },
+            'actinide': { bg: 'color-actinide', text: 'text-gray-900' },
+            'unknown': { bg: 'bg-gray-200', text: 'text-gray-500' },
+        };
+
+        const tableContainer = document.getElementById('periodic-table');
+        const detailCard = document.getElementById('detail-card');
+        const cardContent = document.getElementById('card-content');
+        
+        // Function to create and render all elements
+        function renderPeriodicTable() {
+            // Create a temporary array to hold all 18x7 cells, initialized to null
+            const grid = Array(7).fill(null).map(() => Array(18).fill(null));
+
+            // Populate the grid array with element data
+            for (const symbol in periodicTableData) {
+                const element = periodicTableData[symbol];
+                const [row, col] = element.pos;
+                // row and col are 1-based, array indices are 0-based
+                if (grid[row - 1] && grid[row - 1][col - 1] === null) {
+                    grid[row - 1][col - 1] = { symbol, data: element };
+                }
+            }
+
+            // Manually insert blank spacers and the Lanthanide/Actinide block
+            // Period 4, Group 3-12 (10 spaces)
+            for (let i = 2; i < 12; i++) {
+                grid[3][i] = { symbol: 'Empty', data: { placeholder: true } };
+                grid[4][i] = { symbol: 'Empty', data: { placeholder: true } };
+            }
+            
+            // Period 6 (row 5) and 7 (row 6) - Gap for Lanthanides/Actinides
+            grid[5][2] = { symbol: 'Gap', data: { placeholder: true, label: '57-71' } };
+            grid[6][2] = { symbol: 'Gap', data: { placeholder: true, label: '89-103' } };
+
+
+            // Render the grid to the DOM
+            tableContainer.innerHTML = ''; // Clear previous content
+
+            grid.forEach((row, rowIndex) => {
+                row.forEach((cell, colIndex) => {
+                    const block = document.createElement('div');
+                    block.classList.add('element-block', 'flex-shrink-0');
+
+                    if (cell) {
+                        const data = cell.data;
+                        const symbol = cell.symbol;
+                        const { bg, text } = typeColorMap[data.type || 'unknown'];
+
+                        block.classList.add(bg, text);
+
+                        if (data.placeholder) {
+                             // Handle the 10-column gap for Period 4/5
+                            if (colIndex >= 2 && colIndex <= 11 && rowIndex > 2 && rowIndex < 5) {
+                                block.classList.add('bg-gray-100', 'hover:transform-none', 'hover:shadow-none', 'cursor-default');
+                            } else if (data.label) {
+                                // Lanthanide/Actinide place holders
+                                block.classList.remove(bg);
+                                block.classList.add('bg-gray-300', 'text-gray-800', 'col-span-10', 'hover:transform-none', 'hover:shadow-none', 'cursor-default', 'flex', 'justify-center', 'items-center');
+                                block.style.gridColumn = `${colIndex + 1} / span 10`;
+                                block.innerHTML = `<span class="text-xs font-semibold">${data.label}</span>`;
+                            } else {
+                                // Default empty cell style
+                                block.classList.add('bg-gray-100', 'hover:transform-none', 'hover:shadow-none', 'cursor-default');
+                            }
+                        } else {
+                            // Render a standard element block
+                            block.setAttribute('data-symbol', symbol);
+                            block.onclick = () => showDetailCard(symbol);
+
+                            block.innerHTML = `
+                                <span class="atomic-number">${data.number}</span>
+                                <span class="symbol">${symbol}</span>
+                                <span class="atomic-mass">${data.mass.toFixed(4)}</span>
+                            `;
+                        }
+
+                    } else {
+                        // Invisible spacer for unpopulated areas (e.g., Period 1, Group 2-17)
+                        block.classList.add('bg-transparent', 'shadow-none', 'hover:transform-none', 'hover:shadow-none', 'cursor-default');
+                    }
+
+                    // Only append blocks that are not intentional gaps for Lanthanides/Actinides
+                    if (!(rowIndex === 5 && colIndex >= 3) && !(rowIndex === 6 && colIndex >= 3)) {
+                         tableContainer.appendChild(block);
+                    }
+                });
+                
+                // Manually insert the Lanthanide/Actinide block spanning 10 columns
+                if (rowIndex === 5) {
+                    const block = document.createElement('div');
+                    block.classList.add('element-block', 'bg-purple-100', 'text-gray-600', 'col-span-10', 'hover:transform-none', 'hover:shadow-none', 'cursor-default', 'flex', 'justify-center', 'items-center', 'text-xs', 'font-semibold');
+                    block.style.gridColumn = '3 / span 10';
+                    block.innerHTML = 'Lanthanide Series (57-71)';
+                    tableContainer.appendChild(block);
+                }
+                 if (rowIndex === 6) {
+                    const block = document.createElement('div');
+                    block.classList.add('element-block', 'bg-pink-100', 'text-gray-600', 'col-span-10', 'hover:transform-none', 'hover:shadow-none', 'cursor-default', 'flex', 'justify-center', 'items-center', 'text-xs', 'font-semibold');
+                    block.style.gridColumn = '3 / span 10';
+                    block.innerHTML = 'Actinide Series (89-103)';
+                    tableContainer.appendChild(block);
+                }
+            });
+            
+            // Add a clear break after Period 3 for better visual grouping
+             if (grid.length > 3) {
+                const breakElement = document.createElement('div');
+                breakElement.classList.add('col-span-18', 'h-4', 'bg-transparent');
+                tableContainer.appendChild(breakElement);
+            }
+        }
+        
+        // Function to update and display the detail card
+        function showDetailCard(symbol) {
+            const data = periodicTableData[symbol];
+            if (!data) return;
+
+            // Get color mapping for the detail card symbol block
+            const { bg, text } = typeColorMap[data.type];
+            
+            // 1. Update the Card Content and Styling
+            const detailSymbolBlock = document.getElementById('detail-symbol-block');
+            detailSymbolBlock.className = ''; // Clear existing classes
+            detailSymbolBlock.classList.add('flex-shrink-0', 'mr-4', 'p-4', 'rounded-lg', 'text-center', 'shadow-lg', 'w-20', 'h-20', 'flex', 'flex-col', 'justify-center', 'items-center', 'relative', bg, text);
+
+            // 2. Populate Detail View
+            document.getElementById('detail-symbol').textContent = symbol;
+            document.getElementById('detail-number').textContent = data.number;
+            document.getElementById('detail-mass').textContent = data.mass.toFixed(4);
+            document.getElementById('detail-name').textContent = data.name;
+            
+            // Element Type Badge
+            const typeBadge = document.getElementById('detail-type');
+            typeBadge.textContent = data.type.toUpperCase().replace('-', ' ');
+            
+            // Set Badge color dynamically based on type (a bit verbose but works with Tailwind/custom colors)
+            typeBadge.className = 'text-sm font-medium px-3 py-1 rounded-full text-white ';
+            if (data.type === 'nonmetal') typeBadge.classList.add('bg-green-600');
+            else if (data.type === 'noble') typeBadge.classList.add('bg-red-500');
+            else if (data.type === 'alkali') typeBadge.classList.add('bg-orange-500');
+            else if (data.type === 'alkaline') typeBadge.classList.add('bg-yellow-600');
+            else if (data.type === 'metalloid') typeBadge.classList.add('bg-purple-600');
+            else if (data.type === 'post-transition') typeBadge.classList.add('bg-teal-500');
+            else typeBadge.classList.add('bg-gray-500');
+
+
+            // 3. Populate Data Fields
+            document.getElementById('data-number').textContent = data.number;
+            document.getElementById('data-mass').textContent = data.mass.toFixed(4);
+            document.getElementById('data-config').textContent = data.config;
+            document.getElementById('data-fact').textContent = data.fact;
+
+            // 4. Show the Card
+            detailCard.classList.remove('hidden');
+            detailCard.classList.add('flex');
+            cardContent.classList.remove('scale-95', 'opacity-0');
+            cardContent.classList.add('scale-100', 'opacity-100');
+            
+            // Trap focus for accessibility
+            cardContent.focus();
+        }
+
+        // Function to hide the detail card
+        function hideDetailCard() {
+            cardContent.classList.remove('scale-100', 'opacity-100');
+            cardContent.classList.add('scale-95', 'opacity-0');
+            
+            // Hide the container after the transition
+            setTimeout(() => {
+                detailCard.classList.remove('flex');
+                detailCard.classList.add('hidden');
+            }, 300);
+        }
+
+        // Initial setup on load
+        window.onload = function() {
+            renderPeriodicTable();
+
+            // Handle ESC key to close the modal
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && detailCard.classList.contains('flex')) {
+                    hideDetailCard();
+                }
+            });
+            
+            // Handle clicking outside the modal content to close it
+            detailCard.addEventListener('click', (e) => {
+                if (e.target === detailCard) {
+                    hideDetailCard();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
